@@ -1,25 +1,310 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Water Drop Game</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Water Quest Game</title>
+  <style>
+    /* 
+      Water Quest Game - HTML/CSS/JS
+      Background image by artsysolomon from Pixabay (royalty-free).
+      Background music: "Village Ambiance" by Alexander Nakarada (CC BY 4.0).
+    */
+    body {
+      margin: 0;
+      padding: 0;
+      /* Set ambient background image (cover the screen) */
+      background: url("https://cdn.pixabay.com/photo/2018/05/13/04/07/girl-3395298_1280.jpg") no-repeat center center fixed;
+      background-size: cover;
+      font-family: Arial, sans-serif;
+      color: #333;
+    }
+    /* Center and style the start and end screens */
+    #startScreen, #endScreen {
+      text-align: center;
+      padding: 2rem;
+      color: #fff;
+      text-shadow: 1px 1px 4px #000;
+    }
+    #endScreen { /* initially hidden via display: none below */ }
+    h1, h2 {
+      margin-bottom: 0.5rem;
+    }
+    p {
+      margin-bottom: 1.5rem;
+    }
+    /* Hide game screen and end screen by default */
+    #gameScreen, #endScreen {
+      display: none;
+    }
+    /* Scoreboard styling */
+    #scoreboard {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.7);  /* translucent white background for readability */
+      padding: 0.5rem 1rem;
+      font-size: 1.1rem;
+    }
+    #scoreboard div {
+      font-weight: bold;
+    }
+    #muteBtn {
+      background: none;
+      border: none;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    /* Game area where jugs appear */
+    #gameArea {
+      position: relative;
+      width: 90vw;
+      max-width: 800px;
+      height: 60vh;
+      margin: 1rem auto;
+      overflow: hidden;
+    }
+    /* Milestone message text */
+    #message {
+      position: absolute;
+      top: 10%;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 2rem;
+      font-weight: bold;
+      color: #ffe600; /* bright yellow text for milestone */
+      text-shadow: 2px 2px 5px #000;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none; /* allow clicks through message */
+    }
+    /* Jug (water can) sprite styling */
+    .jug {
+      position: absolute;
+      width: 60px;
+      user-select: none;
+      cursor: pointer;
+      /* start slightly transparent and shifted for animation */
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      /* Recolor the red jug image to charity: water yellow using CSS filter */
+      filter: hue-rotate(60deg) saturate(150%);
+    }
+  </style>
 </head>
 <body>
-    <div class="game-wrapper">
-        <h1 class="game-title">Water Drop</h1>
-        <p class="game-tagline">Catch the good drops, avoid the bad ones!</p>
-        <div class="score-panel">
-            <div class="score">Score: <span id="score">0</span></div>
-            <div class="timer">Time: <span id="time">30</span>s</div>
-            <button id="start-btn">Start Game</button>
-        </div>
-        
-        <div id="game-container">
-        </div>
+
+  <!-- Start Screen -->
+  <div id="startScreen">
+    <h1>Water Quest</h1>
+    <p>Collect as many water jugs as you can in 30 seconds!</p>
+    <button id="startBtn">Start Game</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="gameScreen">
+    <div id="scoreboard">
+      <div>Time: <span id="time">30</span>s</div>
+      <div>Score: <span id="score">0</span></div>
+      <button id="muteBtn">🔊 Mute</button>
     </div>
-    
-    <script src="script.js"></script>
+    <div id="gameArea">
+      <div id="message"></div> <!-- milestone message overlay -->
+    </div>
+  </div>
+
+  <!-- End Screen -->
+  <div id="endScreen">
+    <h2 id="endMessage">Game Over</h2>
+    <p>Your Score: <span id="finalScore">0</span></p>
+    <button id="restartBtn">Play Again</button>
+  </div>
+
+  <!-- Ambient background music (looping) -->
+  <audio id="bgMusic" src="https://happysoulmusic.com/wp-content/grand-media/audio/village-ambiance-by-alexander-nakarada.mp3" loop></audio>
+
+  <script>
+    // Game variables
+    let score = 0;
+    let timeLeft = 30;
+    let gameActive = false;
+    let spawnIntervalId, timerIntervalId;
+    // Milestone checkpoints and messages
+    const milestones = {
+      5: "Good start! 5 jugs collected!",
+      10: "Great job! 10 jugs collected!",
+      15: "Awesome! 15 jugs collected!",
+      20: "Incredible! 20 jugs collected!"
+    };
+    // End game messages
+    const winMessages = [
+      "Amazing! You're a Water Hero! 🎉",
+      "Fantastic! You delivered a lot of water! 💧"
+    ];
+    const loseMessages = [
+      "Good effort! Try again to reach 20. 💪",
+      "Not bad! Keep trying to collect more. 🙂"
+    ];
+
+    const startScreen = document.getElementById('startScreen');
+    const gameScreen = document.getElementById('gameScreen');
+    const endScreen = document.getElementById('endScreen');
+    const scoreSpan = document.getElementById('score');
+    const timeSpan = document.getElementById('time');
+    const messageDiv = document.getElementById('message');
+    const bgMusic = document.getElementById('bgMusic');
+    const muteBtn = document.getElementById('muteBtn');
+
+    // Function to start (or restart) the game
+    function startGame() {
+      // Reset game state
+      score = 0;
+      timeLeft = 30;
+      gameActive = true;
+      scoreSpan.textContent = score;
+      timeSpan.textContent = timeLeft;
+      messageDiv.style.opacity = 0;  // hide any leftover message
+      // Show game screen, hide other screens
+      startScreen.style.display = 'none';
+      endScreen.style.display = 'none';
+      gameScreen.style.display = 'block';
+      // Start background music (play on user interaction)
+      bgMusic.play();
+      // Start the spawn interval (make jugs appear periodically)
+      spawnIntervalId = setInterval(spawnJug, 800);  // spawn a jug every 800ms
+      // Start the countdown timer
+      timerIntervalId = setInterval(updateTimer, 1000);
+    }
+
+    // Function to handle the countdown timer each second
+    function updateTimer() {
+      timeLeft--;
+      timeSpan.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        // Time is up, end the game
+        endGame();
+      }
+    }
+
+    // Function to spawn a water jug at a random position
+    function spawnJug() {
+      // Create a new jug element
+      const jug = document.createElement('img');
+      jug.src = "https://cdn.pixabay.com/photo/2013/07/12/12/48/jerry-can-146288_1280.png";  // red jerrycan image (will be tinted yellow via CSS)
+      jug.className = 'jug';
+      // Random position within the game area bounds
+      const area = document.getElementById('gameArea');
+      const areaRect = area.getBoundingClientRect();
+      const x = Math.random() * (areaRect.width - 60);  // 60px is jug width
+      const y = Math.random() * (areaRect.height - 60);
+      jug.style.left = x + "px";
+      jug.style.top = y + "px";
+      // Add click event to collect the jug
+      jug.addEventListener('click', () => {
+        if (!gameActive) return;  // ignore clicks if game ended
+        // Remove jug and update score
+        jug.remove();
+        score++;
+        scoreSpan.textContent = score;
+        // Check for milestone and show message if reached
+        if (milestones[score]) {
+          showMessage(milestones[score]);
+        }
+        // Play a short "collect" sound using Web Audio API (beep)
+        playBeep();
+      });
+      // Add the jug to the game area
+      area.appendChild(jug);
+      // Trigger fade-in animation (after a tiny delay to allow style application)
+      requestAnimationFrame(() => {
+        jug.style.opacity = 1;
+        jug.style.transform = "translateY(0)";
+      });
+      // Remove the jug after a short time if not clicked (fade out then remove)
+      setTimeout(() => {
+        // If game is still active and jug is still not clicked (in DOM), fade it out
+        if (jug.parentElement) {
+          jug.style.opacity = 0;
+          jug.style.transform = "translateY(-20px)";
+          // Remove the jug completely after the fade-out transition
+          setTimeout(() => {
+            if (jug.parentElement) jug.remove();
+          }, 300);
+        }
+      }, 1000); // jug visible for 1 second if not clicked
+    }
+
+    // Function to display a temporary milestone message
+    function showMessage(text) {
+      messageDiv.textContent = text;
+      messageDiv.style.opacity = 1;
+      // Hide the message after 1.5 seconds
+      setTimeout(() => {
+        messageDiv.style.opacity = 0;
+      }, 1500);
+      // Play a milestone sound (could reuse playBeep or a different sound if desired)
+      playBeep();
+    }
+
+    // Function to play a short "beep" sound for feedback
+    function playBeep() {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880; // frequency in hertz (880Hz = A5 tone)
+      oscillator.connect(ctx.destination);
+      oscillator.start();
+      // Stop the tone after 100ms
+      oscillator.stop(ctx.currentTime + 0.1);
+    }
+
+    // Function to end the game when time runs out
+    function endGame() {
+      gameActive = false;
+      // Stop the spawn and timer intervals
+      clearInterval(spawnIntervalId);
+      clearInterval(timerIntervalId);
+      // Clear any remaining jugs from the game area
+      document.getElementById('gameArea').innerHTML = '<div id="message"></div>';
+      // Determine end message based on score
+      let finalMsg;
+      if (score >= 20) {
+        // Player wins
+        const randIndex = Math.floor(Math.random() * winMessages.length);
+        finalMsg = winMessages[randIndex];
+      } else {
+        // Player loses or needs to try again
+        const randIndex = Math.floor(Math.random() * loseMessages.length);
+        finalMsg = loseMessages[randIndex];
+      }
+      // Update end screen text
+      document.getElementById('finalScore').textContent = score;
+      document.getElementById('endMessage').textContent = finalMsg;
+      // Show end screen and hide game screen
+      gameScreen.style.display = 'none';
+      endScreen.style.display = 'block';
+    }
+
+    // Mute/unmute background music when mute button is clicked
+    muteBtn.addEventListener('click', () => {
+      if (bgMusic.muted) {
+        bgMusic.muted = false;
+        muteBtn.textContent = "🔊 Mute";
+      } else {
+        bgMusic.muted = true;
+        muteBtn.textContent = "🔇 Unmute";
+      }
+    });
+
+    // Start game on "Start Game" button click
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    // Restart game on "Play Again" button click
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+  </script>
 </body>
 </html>
+```
